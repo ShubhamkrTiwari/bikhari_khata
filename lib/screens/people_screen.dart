@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../controllers/expense_controller.dart';
 import '../models/person.dart';
+import '../utils/format.dart';
 import '../widgets/person_avatar.dart';
 
 class PeopleScreen extends StatelessWidget {
@@ -12,6 +13,9 @@ class PeopleScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<ExpenseController>();
     final theme = Theme.of(context);
+    final nets = {
+      for (final b in controller.balancedPeople) b.person.id: b.net,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -21,36 +25,77 @@ class PeopleScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showPersonDialog(context, controller),
-        child: const Icon(Icons.person_add),
+        child: const Icon(Icons.person_add_alt_1_rounded),
       ),
-      body: controller.people.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.group, size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No people yet',
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Tap + to add someone.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.primary.withValues(alpha: 0.05),
+              theme.colorScheme.surface,
+            ],
+            stops: const [0.0, 0.25],
+          ),
+        ),
+        child: controller.people.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 104,
+                      height: 104,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            theme.colorScheme.primary.withValues(alpha: 0.16),
+                            theme.colorScheme.tertiary.withValues(alpha: 0.08),
+                          ],
+                        ),
+                        border: Border.all(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.28),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.group_rounded,
+                        size: 46,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'No people yet',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap + to add friends, flatmates or family.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+                itemCount: controller.people.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, i) {
+                  final p = controller.people[i];
+                  return _personTile(context, controller, p, nets[p.id]);
+                },
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-              itemCount: controller.people.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, i) {
-                final p = controller.people[i];
-                return _personTile(context, controller, p);
-              },
-            ),
+      ),
     );
   }
 
@@ -58,39 +103,86 @@ class PeopleScreen extends StatelessWidget {
     BuildContext context,
     ExpenseController controller,
     Person person,
+    double? net,
   ) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasNet = net != null && net.abs() > 0.009;
+    final color = hasNet
+        ? (net > 0 ? Colors.green : Colors.redAccent)
+        : scheme.primary;
+    final caption = hasNet
+        ? (net > 0 ? 'gets back' : 'owes')
+        : 'settled up';
+
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: PersonAvatar(person: person),
         title: Text(
           person.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'edit') {
-              _showPersonDialog(context, controller, existing: person);
-            } else if (value == 'delete') {
-              _confirmDelete(context, controller, person);
-            }
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(
-              value: 'edit',
-              child: ListTile(
-                dense: true,
-                leading: Icon(Icons.edit),
-                title: Text('Rename'),
+        subtitle: Text(
+          caption,
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasNet)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  signedMoney(net),
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'delete',
-              child: ListTile(
-                dense: true,
-                leading: Icon(Icons.delete_outline, color: Colors.red),
-                title: Text('Delete'),
-              ),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') {
+                  _showPersonDialog(context, controller, existing: person);
+                } else if (value == 'delete') {
+                  _confirmDelete(context, controller, person);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.edit_rounded),
+                    title: Text('Rename'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.delete_outline_rounded, color: Colors.red),
+                    title: Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

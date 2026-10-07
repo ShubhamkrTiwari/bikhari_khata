@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../controllers/auth_controller.dart';
 import '../controllers/expense_controller.dart';
 import '../models/categories.dart';
 import '../models/expense.dart';
@@ -9,6 +10,7 @@ import '../models/payment.dart';
 import '../models/settlement.dart';
 import '../utils/format.dart';
 import '../widgets/expense_tile.dart';
+import '../widgets/floating_nav_bar.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/stat_card.dart';
 import 'add_expense_screen.dart';
@@ -59,32 +61,46 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return Scaffold(
-      body: controller.isLoaded
-          ? IndexedStack(index: _index, children: pages)
-          : const _LoadingView(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+              Theme.of(context).colorScheme.surface,
+              Theme.of(context).colorScheme.surface,
+            ],
+            stops: const [0.0, 0.3, 1.0],
+          ),
+        ),
+        child: controller.isLoaded
+            ? IndexedStack(index: _index, children: pages)
+            : const _LoadingView(),
+      ),
       floatingActionButton: _buildFab(context),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: FloatingNavBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+        onSelected: (i) => setState(() => _index = i),
+        items: const [
+          NavItem(
+            icon: Icons.home_outlined,
+            activeIcon: Icons.home_rounded,
             label: 'Home',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.balance_outlined),
-            selectedIcon: Icon(Icons.balance),
+          NavItem(
+            icon: Icons.balance_outlined,
+            activeIcon: Icons.balance_rounded,
             label: 'Balances',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
+          NavItem(
+            icon: Icons.map_outlined,
+            activeIcon: Icons.map_rounded,
             label: 'Groups',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.group_outlined),
-            selectedIcon: Icon(Icons.group),
+          NavItem(
+            icon: Icons.group_outlined,
+            activeIcon: Icons.group_rounded,
             label: 'People',
           ),
         ],
@@ -173,6 +189,33 @@ class _ActivityTabState extends State<_ActivityTab> {
     return CustomScrollView(
       slivers: [
         _DashboardHeader(controller: controller),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  formatDate(DateTime.now()),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    controller.groupName,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         SliverToBoxAdapter(child: _buildStatsRow(controller)),
         SliverToBoxAdapter(child: _buildGroupChips(controller)),
         SliverToBoxAdapter(child: _buildSearchField()),
@@ -273,13 +316,15 @@ class _ActivityTabState extends State<_ActivityTab> {
   Widget _buildGroupChips(ExpenseController controller) {
     final items = <Widget>[
       _ChipItem(
-        label: '🌐 All',
+        emoji: '🌐',
+        label: 'All',
         selected: controller.activeGroupId == null,
         onTap: () => controller.setActiveGroup(null),
       ),
       for (final g in controller.groups)
         _ChipItem(
-          label: '${g.emoji} ${g.name}',
+          emoji: g.emoji,
+          label: g.name,
           selected: controller.activeGroupId == g.id,
           color: g.color,
           onTap: () => controller.setActiveGroup(g.id),
@@ -296,6 +341,14 @@ class _ActivityTabState extends State<_ActivityTab> {
   }
 
   Widget _buildSearchField() {
+    final scheme = Theme.of(context).colorScheme;
+    OutlineInputBorder border({Color? color, double width = 1}) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: color == null
+              ? BorderSide.none
+              : BorderSide(color: color, width: width),
+        );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
       child: TextField(
@@ -303,12 +356,24 @@ class _ActivityTabState extends State<_ActivityTab> {
         onChanged: (_) => setState(() {}),
         decoration: InputDecoration(
           hintText: 'Search expenses…',
-          prefixIcon: const Icon(Icons.search),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 21,
+            color: scheme.onSurfaceVariant,
+          ),
           isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 13),
+          filled: true,
+          fillColor: scheme.surfaceContainerHigh,
+          border: border(),
+          enabledBorder: border(
+            color: scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+          focusedBorder: border(color: scheme.primary, width: 1.5),
           suffixIcon: _searchController.text.isEmpty
               ? null
               : IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close_rounded, size: 20),
                   onPressed: () {
                     _searchController.clear();
                     setState(() {});
@@ -347,12 +412,14 @@ class _ActivityTabState extends State<_ActivityTab> {
 
 class _ChipItem extends StatelessWidget {
   final String label;
+  final String? emoji;
   final bool selected;
   final VoidCallback onTap;
   final Color? color;
 
   const _ChipItem({
     required this.label,
+    this.emoji,
     required this.selected,
     required this.onTap,
     this.color,
@@ -360,17 +427,61 @@ class _ChipItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = color ?? Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final base = color ?? scheme.primary;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        selected: selected,
-        onSelected: (_) => onTap(),
-        label: Text(label),
-        selectedColor: base,
-        labelStyle: TextStyle(
-          color: selected ? Colors.white : null,
-          fontWeight: FontWeight.w600,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? LinearGradient(
+                    colors: [base, Color.lerp(base, scheme.tertiary, 0.5)!],
+                  )
+                : null,
+            color: selected ? null : scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected
+                  ? Colors.transparent
+                  : scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: base.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (emoji != null) ...[
+                Text(
+                  emoji!,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(width: 6),
+              ],
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 220),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : scheme.onSurfaceVariant,
+                ),
+                child: Text(label),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -384,55 +495,32 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = context.watch<AuthController>().user;
+    final greetingName = user == null
+        ? ''
+        : user.name.trim().split(RegExp(r'\s+')).first;
     return SliverAppBar(
       pinned: true,
-      expandedHeight: 120,
+      elevation: 0,
       backgroundColor: theme.colorScheme.primary,
       foregroundColor: Colors.white,
+      title: Text(
+        user == null ? 'Split Khata' : 'Namaste, $greetingName 👋',
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 18,
+          letterSpacing: -0.3,
+        ),
+      ),
       actions: [
         IconButton(
           tooltip: 'Export CSV',
           icon: const Icon(Icons.ios_share),
           onPressed: () => _export(context),
         ),
-        const SizedBox(width: 4),
+        const _UserMenu(),
       ],
-      flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.fromLTRB(20, 0, 60, 20),
-        title: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Split Khata',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
-              ),
-            ),
-            Text(
-              controller.groupName,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-        ),
-        background: DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                theme.colorScheme.primary,
-                theme.colorScheme.primary.withValues(alpha: 0.78),
-                theme.colorScheme.tertiary.withValues(alpha: 0.65),
-              ],
-            ),
-          ),
-          child: const SizedBox.expand(),
-        ),
-      ),
     );
   }
 
@@ -469,25 +557,138 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+/// Signed-in user's avatar with account info + logout.
+class _UserMenu extends StatelessWidget {
+  const _UserMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthController>().user;
+    if (user == null) return const SizedBox(width: 8);
+    return PopupMenuButton<String>(
+      offset: const Offset(0, 48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      onSelected: (value) async {
+        if (value != 'logout') return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Log out?'),
+            content: Text(
+              'Your data stays safe on this device and in the cloud. '
+              'Sign back in anytime with ${user.email}.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Log out'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true && context.mounted) {
+          await context.read<AuthController>().signOut();
+        }
+      },
+      itemBuilder: (menuContext) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user.displayLabel,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                user.email,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(menuContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'logout',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.logout_rounded, color: Colors.redAccent),
+            title: Text('Log out', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.only(right: 14),
+        child: CircleAvatar(
+          backgroundColor: Colors.white.withValues(alpha: 0.22),
+          foregroundColor: Colors.white,
+          child: Text(
+            user.initials,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyActivity extends StatelessWidget {
   const _EmptyActivity();
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
+          Container(
+            width: 104,
+            height: 104,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primary.withValues(alpha: 0.16),
+                  scheme.tertiary.withValues(alpha: 0.08),
+                ],
+              ),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: 0.28),
+              ),
+            ),
+            child: Icon(
+              Icons.receipt_long_rounded,
+              size: 46,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(height: 18),
           Text(
-            'No expenses here yet',
-            style: Theme.of(context).textTheme.titleLarge,
+            'No expenses yet',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Tap "Add" to split your first expense.',
-            style: TextStyle(color: Colors.grey.shade600),
+          SizedBox(
+            width: 250,
+            child: Text(
+              'Tap "Add" to split your first expense with the group.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            ),
           ),
         ],
       ),
@@ -643,14 +844,14 @@ class _BalancesTab extends StatelessWidget {
   }
 
   Widget _balanceTile(BuildContext context, BalancedPerson b) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final isPositive = b.net > 0.009;
     final isNegative = b.net < -0.009;
     final color = isPositive
         ? Colors.green
         : isNegative
-        ? Colors.red.shade400
-        : theme.colorScheme.primary;
+        ? Colors.redAccent
+        : scheme.primary;
     final caption = isPositive
         ? 'will receive'
         : isNegative
@@ -659,19 +860,49 @@ class _BalancesTab extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: PersonAvatar(person: b.person),
         title: Text(
           b.person.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
-        subtitle: Text(caption),
-        trailing: Text(
-          signedMoney(b.net),
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
+        subtitle: Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              caption,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Text(
+            signedMoney(b.net),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 14.5,
+            ),
           ),
         ),
       ),
@@ -683,41 +914,123 @@ class _BalancesTab extends StatelessWidget {
     Settlement s,
     VoidCallback onTap,
   ) {
+    final scheme = Theme.of(context).colorScheme;
     final from = controller.personById(s.from);
     final to = controller.personById(s.to);
     if (from == null || to == null) return const SizedBox.shrink();
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
-      child: ListTile(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
-        leading: PersonAvatar(person: from, radius: 20),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                from.name,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 56,
+                height: 38,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: PersonAvatar(person: from, radius: 17),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: PersonAvatar(person: to, radius: 17),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Icon(Icons.arrow_forward, size: 16),
-            Flexible(
-              child: Text(
-                ' ${to.name}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            from.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 15,
+                            color: scheme.primary,
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            to.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'tap to settle up',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        subtitle: const Text('should pay  •  tap to settle'),
-        trailing: Text(
-          formatMoney(s.amount),
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      scheme.primary,
+                      Color.lerp(scheme.primary, scheme.tertiary, 0.7)!,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  formatMoney(s.amount),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -774,29 +1087,58 @@ class _BalancesTab extends StatelessWidget {
   }
 
   Widget _paymentTile(BuildContext context, Payment p) {
+    final scheme = Theme.of(context).colorScheme;
     final from = controller.personById(p.from);
     final to = controller.personById(p.to);
     if (from == null || to == null) return const SizedBox.shrink();
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
       child: ListTile(
-        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         onTap: () => showSettleUpSheet(context, existing: p),
-        leading: PersonAvatar(person: from, radius: 18),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.green.withValues(alpha: 0.12),
+            border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+          ),
+          child: const Icon(
+            Icons.check_circle_outline_rounded,
+            color: Colors.green,
+            size: 21,
+          ),
+        ),
         title: Text(
           '${from.name} → ${to.name}',
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
         subtitle: Text(
           '${formatDate(p.date)}'
           '${p.note.isNotEmpty ? ' • ${p.note}' : ''}',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
         ),
-        trailing: Text(
-          formatMoney(p.amount),
-          style: const TextStyle(
-            color: Colors.green,
-            fontWeight: FontWeight.w800,
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+          ),
+          child: Text(
+            formatMoney(p.amount),
+            style: const TextStyle(
+              color: Colors.green,
+              fontWeight: FontWeight.w800,
+              fontSize: 13.5,
+            ),
           ),
         ),
       ),
@@ -808,17 +1150,46 @@ class _BalancesTab extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: const Row(
         children: [
-          Icon(Icons.celebration, color: Colors.green),
+          CircleAvatar(
+            radius: 19,
+            backgroundColor: Colors.white24,
+            foregroundColor: Colors.white,
+            child: Icon(Icons.celebration_rounded, size: 22),
+          ),
           SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'Everyone is settled up. No pending payments!',
-              style: TextStyle(fontWeight: FontWeight.w600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'All settled up 🎉',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  'No pending payments between members',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
           ),
         ],
@@ -827,16 +1198,32 @@ class _BalancesTab extends StatelessWidget {
   }
 
   Widget _sectionTitle(BuildContext context, String text) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Text(
-        text,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.primary,
-          letterSpacing: 1,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 14,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [scheme.primary, scheme.tertiary],
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11.5,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w800,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

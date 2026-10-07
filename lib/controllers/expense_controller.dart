@@ -9,6 +9,7 @@ import '../models/group.dart';
 import '../models/payment.dart';
 import '../models/person.dart';
 import '../models/settlement.dart';
+import '../services/appwrite_sync_service.dart';
 
 /// Central app state: groups, people, expenses, payments, balances and
 /// local persistence. Balances/settlements are scoped to the active group.
@@ -73,9 +74,17 @@ class ExpenseController extends ChangeNotifier {
   Person? personById(String id) =>
       _people.where((p) => p.id == id).firstOrNull;
 
-  Future<void> load() async {
+  Future<void>? _loadTask;
+
+  /// Idempotent: concurrent callers all share the same load future, which
+  /// prevents the old double-load race that persisted duplicate entries.
+  Future<void> load() => _loadTask ??= _doLoad();
+
+  Future<void> _doLoad() async {
     if (_loaded) return;
     final prefs = await SharedPreferences.getInstance();
+    
+    // 1. Load local cache
     final rawGroups = prefs.getString(_groupsKey);
     if (rawGroups != null) {
       _groups.addAll(
@@ -83,7 +92,6 @@ class ExpenseController extends ChangeNotifier {
             .map((e) => Group.fromJson(e as Map<String, dynamic>)),
       );
     }
-    // Always keep the default General group present.
     if (_groups.where((g) => g.id == kGeneralGroupId).isEmpty) {
       _groups.insert(
         0,
@@ -126,24 +134,65 @@ class ExpenseController extends ChangeNotifier {
     }
     _payments.sort((a, b) => b.date.compareTo(a.date));
 
-    // Backfill: any group without explicit members includes everyone so that
-    // legacy / default groups stay usable.
-    var changed = false;
+    // 2. Fetch and sync remote data if available
+    try {
+      await AppwriteSyncService.initRemote();
+      final remoteGroups = await AppwriteSyncService.fetchGroups();
+      for (final rg in remoteGroups) {
+        if (!_groups.any((g) => g.id == rg.id)) {
+          _groups.add(rg);
+        }
+      }
+
+      final remotePeople = await AppwriteSyncService.fetchPeople();
+      for (final rp in remotePeople) {
+        if (!_people.any((p) => p.id == rp.id)) {
+          _people.add(rp);
+        }
+      }
+
+      final remoteExpenses = await AppwriteSyncService.fetchExpenses();
+      for (final re in remoteExpenses) {
+        if (!_expenses.any((e) => e.id == re.id)) {
+          _expenses.add(re);
+        }
+      }
+      _expenses.sort((a, b) => b.date.compareTo(a.date));
+
+      final remotePayments = await AppwriteSyncService.fetchPayments();
+      for (final rp in remotePayments) {
+        if (!_payments.any((p) => p.id == rp.id)) {
+          _payments.add(rp);
+        }
+      }
+      _payments.sort((a, b) => b.date.compareTo(a.date));
+    } catch (e) {
+      debugPrint('Cloud sync load error: $e');
+    }
+
+    _dedupeById<Group>(_groups, (g) => g.id);
+    _dedupeById<Person>(_people, (p) => p.id);
+    _dedupeById<Expense>(_expenses, (e) => e.id);
+    _dedupeById<Payment>(_payments, (p) => p.id);
+
     for (var i = 0; i < _groups.length; i++) {
-      if (_groups[i].memberIds.isEmpty) {
+      if (_groups[i].memberIds.isEmpty && _people.isNotEmpty) {
         _groups[i] = _groups[i].copyWith(
           memberIds: _people.map((p) => p.id).toList(),
         );
-        changed = true;
       }
-    }
-    if (changed) {
-      _loaded = true;
-      await _persist();
     }
 
     _loaded = true;
+    await _persist();
     notifyListeners();
+  }
+
+  static bool _dedupeById<T>(List<T> items, String Function(T) idOf) {
+    final seen = <String>{};
+    final before = items.length;
+    items.removeWhere((item) => !seen.add(idOf(item)));
+    return items.length != before;
   }
 
   String _generateId() =>
@@ -164,14 +213,15 @@ class ExpenseController extends ChangeNotifier {
     if (trimmed.isEmpty) return;
     final person = _newPerson(trimmed);
     _people.add(person);
-    // New people join every existing group by default.
     for (var i = 0; i < _groups.length; i++) {
       _groups[i] = _groups[i].copyWith(
         memberIds: [..._groups[i].memberIds, person.id],
       );
+      await AppwriteSyncService.saveGroup(_groups[i]);
     }
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.savePerson(person);
   }
 
   Future<void> renamePerson(String id, String name) async {
@@ -180,6 +230,7 @@ class ExpenseController extends ChangeNotifier {
     _people[index] = _people[index].copyWith(name: name.trim());
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.savePerson(_people[index]);
   }
 
   Future<void> removePerson(String id) async {
@@ -192,6 +243,7 @@ class ExpenseController extends ChangeNotifier {
       _groups[i] = _groups[i].copyWith(
         memberIds: _groups[i].memberIds.where((m) => m != id).toList(),
       );
+      await AppwriteSyncService.saveGroup(_groups[i]);
     }
     notifyListeners();
     await _persist();
@@ -207,17 +259,17 @@ class ExpenseController extends ChangeNotifier {
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    _groups.add(
-      Group(
-        id: _generateId(),
-        name: trimmed,
-        emoji: emoji,
-        colorValue: colorValue ?? _palette[_groups.length % _palette.length],
-        memberIds: memberIds ?? _people.map((p) => p.id).toList(),
-      ),
+    final group = Group(
+      id: _generateId(),
+      name: trimmed,
+      emoji: emoji,
+      colorValue: colorValue ?? _palette[_groups.length % _palette.length],
+      memberIds: memberIds ?? _people.map((p) => p.id).toList(),
     );
+    _groups.add(group);
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.saveGroup(group);
   }
 
   Future<void> updateGroup(Group updated) async {
@@ -226,6 +278,7 @@ class ExpenseController extends ChangeNotifier {
     _groups[index] = updated;
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.saveGroup(updated);
   }
 
   Future<void> removeGroup(String id) async {
@@ -236,6 +289,7 @@ class ExpenseController extends ChangeNotifier {
     if (_activeGroupId == id) _activeGroupId = null;
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.deleteGroupRemote(id);
   }
 
   // ---- Expenses ------------------------------------------------------------
@@ -245,12 +299,14 @@ class ExpenseController extends ChangeNotifier {
     _expenses.sort((a, b) => b.date.compareTo(a.date));
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.saveExpense(expense);
   }
 
   Future<void> removeExpense(String id) async {
     _expenses.removeWhere((e) => e.id == id);
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.deleteExpenseRemote(id);
   }
 
   // ---- Payments ------------------------------------------------------------
@@ -260,6 +316,7 @@ class ExpenseController extends ChangeNotifier {
     _payments.sort((a, b) => b.date.compareTo(a.date));
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.savePayment(payment);
   }
 
   Future<void> updatePayment(Payment payment) async {
@@ -269,12 +326,14 @@ class ExpenseController extends ChangeNotifier {
     _payments.sort((a, b) => b.date.compareTo(a.date));
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.savePayment(payment);
   }
 
   Future<void> removePayment(String id) async {
     _payments.removeWhere((p) => p.id == id);
     notifyListeners();
     await _persist();
+    await AppwriteSyncService.deletePaymentRemote(id);
   }
 
   Future<void> _persist() async {

@@ -70,6 +70,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Add Expense'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.check_circle_outline),
@@ -83,11 +85,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionCard(
-              title: 'Amount',
-              child: _buildAmountField(theme),
-            ),
-            const SizedBox(height: 12),
+            _buildAmountField(theme),
+            const SizedBox(height: 14),
             _sectionCard(
               title: 'What was it for?',
               child: TextFormField(
@@ -136,10 +135,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: _submit,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add_rounded),
               label: const Text('Save Expense'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 17),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -150,12 +156,20 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Widget _sectionCard({required String title, required Widget child}) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,10 +177,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           Text(
             title.toUpperCase(),
             style: TextStyle(
-              fontSize: 12,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.primary,
+              fontSize: 11.5,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w800,
+              color: scheme.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -177,41 +191,108 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Widget _buildAmountField(ThemeData theme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          '₹',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+    final scheme = theme.colorScheme;
+    final showPerPerson = _selected.isNotEmpty && _total > 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primary,
+            Color.lerp(scheme.primary, scheme.tertiary, 0.75)!,
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextFormField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.45),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'AMOUNT',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.6,
+              fontWeight: FontWeight.w800,
+              color: Colors.white.withValues(alpha: 0.85),
             ),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                '₹',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: _amountController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                  ],
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 40,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                  cursorColor: Colors.white,
+                  decoration: InputDecoration(
+                    hintText: '0.00',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontWeight: FontWeight.w900,
+                    ),
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorStyle: const TextStyle(color: Colors.white),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  validator: (v) {
+                    final value = double.tryParse(v ?? '');
+                    if (value == null || value <= 0) {
+                      return 'Enter a valid amount';
+                    }
+                    return null;
+                  },
+                ),
+              ),
             ],
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-            decoration: const InputDecoration(
-              hintText: '0.00',
-              border: InputBorder.none,
-            ),
-            onChanged: (_) => setState(() {}),
-            validator: (v) {
-              final value = double.tryParse(v ?? '');
-              if (value == null || value <= 0) return 'Enter a valid amount';
-              return null;
-            },
           ),
-        ),
-      ],
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: Text(
+              showPerPerson
+                  ? '₹${_perPersonEqual.toStringAsFixed(2)} per person · ${_selected.length} ${_selected.length == 1 ? 'person' : 'people'}'
+                  : 'Select people below to see the per-person split',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

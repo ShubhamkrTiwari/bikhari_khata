@@ -20,18 +20,38 @@ class GroupsScreen extends StatelessWidget {
         title: const Text('Groups & Trips'),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add_outlined),
+            tooltip: 'Join Group',
+            onPressed: () => _showJoinGroupDialog(context, controller),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showGroupDialog(context, controller),
         child: const Icon(Icons.add),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-        children: [
-          _allGroupsTile(context, controller),
-          const SizedBox(height: 8),
-          for (final g in controller.groups) _groupTile(context, controller, g),
-        ],
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.primary.withValues(alpha: 0.05),
+              theme.colorScheme.surface,
+            ],
+            stops: const [0.0, 0.25],
+          ),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+          children: [
+            _allGroupsTile(context, controller),
+            const SizedBox(height: 8),
+            for (final g in controller.groups) _groupTile(context, controller, g),
+          ],
+        ),
       ),
     );
   }
@@ -116,6 +136,13 @@ class GroupsScreen extends StatelessWidget {
                   autofocus: true,
                   decoration: const InputDecoration(labelText: 'Name'),
                 ),
+                if (existing != null) ...[
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    'Group ID (Share with friends to connect): ${existing.id}',
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.primary),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text('Icon', style: Theme.of(ctx).textTheme.labelLarge),
                 const SizedBox(height: 8),
@@ -268,6 +295,53 @@ class GroupsScreen extends StatelessWidget {
       await controller.removeGroup(group.id);
     }
   }
+
+  Future<void> _showJoinGroupDialog(
+    BuildContext context,
+    ExpenseController controller,
+  ) async {
+    final idController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Join Connected Group'),
+        content: TextField(
+          controller: idController,
+          decoration: const InputDecoration(
+            labelText: 'Enter Group ID or Code',
+            hintText: 'e.g., group_id_here',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final id = idController.text.trim();
+              if (id.isEmpty) return;
+              Navigator.pop(ctx);
+              await controller.load();
+              final found = controller.groupById(id);
+              if (found != null) {
+                controller.setActiveGroup(id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Joined group "${found.name}" successfully!')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Group ID not found in cloud database.')),
+                );
+              }
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+    idController.dispose();
+  }
 }
 
 class _GroupCard extends StatelessWidget {
@@ -291,42 +365,89 @@ class _GroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: selected ? color : Colors.transparent,
-          width: 2,
+          color: selected
+              ? color
+              : scheme.outlineVariant.withValues(alpha: 0.4),
+          width: selected ? 1.6 : 1,
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: color.withValues(alpha: 0.16),
-                child: Text(emoji, style: const TextStyle(fontSize: 20)),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withValues(alpha: 0.25),
+                      color.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: color.withValues(alpha: 0.35)),
+                ),
+                alignment: Alignment.center,
+                child: Text(emoji, style: const TextStyle(fontSize: 24)),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        if (selected) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'viewing',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: scheme.onSurfaceVariant,
                         fontSize: 12,
                       ),
                     ),
@@ -334,9 +455,7 @@ class _GroupCard extends StatelessWidget {
                 ),
               ),
               if (selected)
-                Icon(Icons.check_circle, color: color)
-              else
-                const SizedBox.shrink(),
+                Icon(Icons.check_circle_rounded, color: color, size: 22),
               ...actions,
             ],
           ),

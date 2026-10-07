@@ -21,6 +21,11 @@ class AppwriteService {
   static late final Messaging messaging;
   static late final Realtime realtime;
 
+  static bool _ready = false;
+
+  /// True once [init] has completed. Guards callers in tests / before startup.
+  static bool get isReady => _ready;
+
   static bool get isConfigured =>
       dotenv.env['APPWRITE_PROJECT_ID'] != null &&
       dotenv.env['APPWRITE_PROJECT_ID']!.isNotEmpty &&
@@ -37,10 +42,12 @@ class AppwriteService {
       ..setEndpoint(dotenv.env['APPWRITE_ENDPOINT'] ?? '')
       ..setProject(projectId);
 
-    // The secret API key (dev key) should ideally only be used server-side
-    // (functions). It is attached here so direct calls work during development.
-    final apiKey = dotenv.env['APPWRITE_API_KEY'];
-    if (apiKey != null && apiKey.isNotEmpty) client.setDevKey(apiKey);
+    // IMPORTANT: the secret API key is intentionally NOT attached here. This
+    // is a client-side app; auth (email/password) works with just the
+    // endpoint + project ID and a session cookie. Sending the secret key
+    // would make Appwrite treat every call as the "applications" role and
+    // reject account operations with "missing scopes ([account])". Keep the
+    // key in .env for trusted server-side use only.
 
     account = Account(client);
     databases = Databases(client);
@@ -48,5 +55,6 @@ class AppwriteService {
     functions = Functions(client);
     messaging = Messaging(client);
     realtime = Realtime(client);
+    _ready = true;
   }
 }
